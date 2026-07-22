@@ -216,3 +216,7 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Base de datos local SQLite (Datos sensibles)
+database/*.db
+*.db

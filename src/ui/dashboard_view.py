@@ -1,6 +1,9 @@
+from tkinter import ttk, filedialog, messagebox
 import customtkinter as ctk
-from tkinter import filedialog, messagebox
+
+from src.services.depto_service import buscar_integrantes_y_deptos, obtener_resumen_metricas
 from src.services.excel_service import importar_carpeta_bloque, importar_ficha_excel, exportar_consolidad_excel
+
 
 class DashboardWindow(ctk.CTk):
     def __init__(self, user_data):
@@ -10,8 +13,8 @@ class DashboardWindow(ctk.CTk):
 
         # Configuración de la ventana principal
         self.title("Sistema de Gestión de Departamentos")
-        self.geometry("950x600")
-        self.minsize(800, 500)
+        self.geometry("980x620")
+        self.minsize(850, 500)
 
         # Configurar grid layout (1 fila, 2 columnas)
         self.grid_rowconfigure(0, weight=1)
@@ -73,7 +76,7 @@ class DashboardWindow(ctk.CTk):
         self.main_frame = ctk.CTkFrame(self, corner_radius=10)
         self.main_frame.grid(row=0, column=1, padx=20, pady=20, sticky="nsew")
 
-        # Cargar vista por defecto al iniciar
+        # Cargar vista por defecto
         self.show_visualizar_datos()
 
     def clear_main_frame(self):
@@ -82,21 +85,105 @@ class DashboardWindow(ctk.CTk):
             widget.destroy()
 
     def show_visualizar_datos(self):
-        """Vista para consultar departamentos y residentes."""
+        """Vista para consultar departamentos, residentes y filtrar en tiempo real."""
         self.clear_main_frame()
+
+        # Header
         label = ctk.CTkLabel(
             self.main_frame, 
-            text="🔍 Visualización de Departamentos y Residentes", 
+            text="🔍 Consulta de Departamentos y Residentes", 
             font=ctk.CTkFont(size=18, weight="bold")
         )
-        label.pack(pady=20, padx=20, anchor="w")
-        
-        placeholder = ctk.CTkLabel(
-            self.main_frame, 
-            text="[Aquí irá la tabla de departamentos y residentes]", 
-            text_color="gray"
+        label.pack(pady=(15, 10), padx=20, anchor="w")
+
+        # Frame de Búsqueda y Métricas
+        top_frame = ctk.CTkFrame(self.main_frame, fg_color="transparent")
+        top_frame.pack(fill="x", padx=20, pady=(0, 10))
+
+        # Buscador
+        self.entry_search = ctk.CTkEntry(
+            top_frame, 
+            placeholder_text="🔎 Buscar por RUT, Nombre, Block o Depto...",
+            width=360,
+            height=35
         )
-        placeholder.pack(pady=50)
+        self.entry_search.pack(side="left", padx=(0, 10))
+        self.entry_search.bind("<KeyRelease>", lambda event: self.actualizar_tabla_datos())
+
+        # Métricas resumidas
+        total_deptos, total_residentes = obtener_resumen_metricas()
+        self.label_stats = ctk.CTkLabel(
+            top_frame, 
+            text=f"🏢 Deptos: {total_deptos}  |  👥 Residentes: {total_residentes}",
+            font=ctk.CTkFont(size=13, weight="bold"),
+            text_color="#4CAF50"
+        )
+        self.label_stats.pack(side="right", padx=10)
+
+        # Configuración de estilos para Treeview (Tabla) en modo oscuro
+        style = ttk.Style()
+        style.theme_use("clam")
+        style.configure("Treeview", 
+                        background="#2A2A2A", 
+                        foreground="white", 
+                        fieldbackground="#2A2A2A", 
+                        rowheight=28,
+                        font=('Arial', 10))
+        style.configure("Treeview.Heading", 
+                        background="#1F1F1F", 
+                        foreground="white", 
+                        font=('Arial', 10, 'bold'))
+        style.map("Treeview", background=[('selected', '#1F6AA5')])
+
+        # Frame contenedor de la Tabla
+        table_frame = ctk.CTkFrame(self.main_frame, corner_radius=10)
+        table_frame.pack(fill="both", expand=True, padx=20, pady=(0, 15))
+
+        # Definir Columnas
+        columns = ("block", "depto", "parentesco", "nombre", "rut", "asistencia")
+        self.tree = ttk.Treeview(table_frame, columns=columns, show="headings", selectmode="browse")
+
+        self.tree.heading("block", text="BLOCK")
+        self.tree.heading("depto", text="DEPTO")
+        self.tree.heading("parentesco", text="PARENTESCO")
+        self.tree.heading("nombre", text="NOMBRE COMPLETO")
+        self.tree.heading("rut", text="RUT")
+        self.tree.heading("asistencia", text="ASISTENCIA")
+
+        self.tree.column("block", width=110, anchor="center")
+        self.tree.column("depto", width=90, anchor="center")
+        self.tree.column("parentesco", width=120, anchor="center")
+        self.tree.column("nombre", width=220, anchor="w")
+        self.tree.column("rut", width=110, anchor="center")
+        self.tree.column("asistencia", width=90, anchor="center")
+
+        # Scrollbar vertical para la tabla
+        scrollbar = ttk.Scrollbar(table_frame, orient="vertical", command=self.tree.yview)
+        self.tree.configure(yscrollcommand=scrollbar.set)
+
+        self.tree.pack(side="left", fill="both", expand=True, padx=(10, 0), pady=10)
+        scrollbar.pack(side="right", fill="y", padx=(0, 10), pady=10)
+
+        # Cargar datos iniciales
+        self.actualizar_tabla_datos()
+
+    def actualizar_tabla_datos(self):
+        """Limpia y repuebla la tabla según el filtro escrito."""
+        for row in self.tree.get_children():
+            self.tree.delete(row)
+
+        filtro = self.entry_search.get() if hasattr(self, 'entry_search') else ""
+        registros = buscar_integrantes_y_deptos(filtro)
+
+        for reg in registros:
+            self.tree.insert("", "end", values=(
+                reg["bloque"],
+                reg["numero_depto"],
+                reg["parentesco"] or "N/A",
+                reg["nombre_completo"].strip() or "SIN NOMBRE",
+                reg["rut"] or "N/A",
+                reg["asistencia_reuniones"] or "NO"
+            ))
 
     def show_gestion_datos(self):
         """Vista para agregar, editar o importar/exportar información."""
@@ -104,72 +191,50 @@ class DashboardWindow(ctk.CTk):
         
         label = ctk.CTkLabel(
             self.main_frame, 
-            text="⚙️ Gestión de Datos e Importación / Exportación", 
+            text="⚙️ Gestión de Datos e Importación Masiva", 
             font=ctk.CTkFont(size=18, weight="bold")
         )
-        label.pack(pady=(20, 10), padx=20, anchor="w")
+        label.pack(pady=20, padx=20, anchor="w")
 
-        # 1. Sección: Carga e Importación
+        # Frame de Carga Masiva
         import_frame = ctk.CTkFrame(self.main_frame, corner_radius=10)
-        import_frame.pack(pady=10, padx=20, fill="x", anchor="n")
+        import_frame.pack(pady=10, padx=20, fill="x")
 
         ctk.CTkLabel(
             import_frame, 
-            text="📥 Carga de Datos (Excel)", 
+            text="📁 Carga Masiva / Individual desde Excel", 
             font=ctk.CTkFont(size=14, weight="bold")
         ).pack(pady=(15, 5), padx=15, anchor="w")
 
         ctk.CTkLabel(
             import_frame, 
-            text="Carga una carpeta completa de un Block o sube una ficha individual (.xlsx).",
+            text="Selecciona una carpeta completa de un Block o sube una ficha individual (.xlsx).",
             text_color="gray"
         ).pack(pady=(0, 10), padx=15, anchor="w")
 
-        btn_import_container = ctk.CTkFrame(import_frame, fg_color="transparent")
-        btn_import_container.pack(pady=(0, 15), padx=15, fill="x")
+        btn_container = ctk.CTkFrame(import_frame, fg_color="transparent")
+        btn_container.pack(pady=(0, 15), padx=15, fill="x")
 
         btn_folder = ctk.CTkButton(
-            btn_import_container, 
+            btn_container, 
             text="📂 Cargar Carpeta de Block", 
             command=self.accion_importar_carpeta
         )
         btn_folder.pack(side="left", padx=(0, 10))
 
         btn_file = ctk.CTkButton(
-            btn_import_container, 
-            text="📄 Cargar Archivo Individual", 
+            btn_container, 
+            text="📄 Cargar Archivo Excel Individual", 
             fg_color="#1F6AA5",
             command=self.accion_importar_archivo
         )
-        btn_file.pack(side="left")
-
-        # 2. Sección: Exportación
-        export_frame = ctk.CTkFrame(self.main_frame, corner_radius=10)
-        export_frame.pack(pady=10, padx=20, fill="x", anchor="n")
-
-        ctk.CTkLabel(
-            export_frame, 
-            text="📤 Exportar Información", 
-            font=ctk.CTkFont(size=14, weight="bold")
-        ).pack(pady=(15, 5), padx=15, anchor="w")
-
-        ctk.CTkLabel(
-            export_frame, 
-            text="Genera un reporte consolidado en Excel con todos los bloques, departamentos y grupo familiar.",
-            text_color="gray"
-        ).pack(pady=(0, 10), padx=15, anchor="w")
-
-        btn_export_container = ctk.CTkFrame(export_frame, fg_color="transparent")
-        btn_export_container.pack(pady=(0, 15), padx=15, fill="x")
+        btn_file.pack(side="left", padx=(0, 10))
 
         btn_export = ctk.CTkButton(
-            btn_export_container, 
+            btn_container, 
             text="📊 Exportar BD a Excel Consolidado", 
             fg_color="#2E7D32", 
             hover_color="#1B5E20",
-            width=250,
-            height=35,
-            font=ctk.CTkFont(weight="bold"),
             command=self.accion_exportar
         )
         btn_export.pack(side="left")

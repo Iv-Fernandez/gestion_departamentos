@@ -1,63 +1,92 @@
 import sqlite3
 import os
-from src.auth.security import hash_password
+import sys
+import hashlib
 
-# Definimos el directorio raíz del proyecto para asegurar las rutas de archivos
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-DB_PATH = os.path.join(BASE_DIR, "database", "sistema_departamentos.db")
-SCHEMA_PATH = os.path.join(BASE_DIR, "database", "schema.sql")
+def get_base_dir():
+    """
+    Obtiene la ruta real donde está ejecutándose la app,
+    tanto en modo desarrollo como en el archivo .exe compilado.
+    """
+    if getattr(sys, 'frozen', False):
+        # Si corre dentro de un ejecutable (.exe), la ruta base es donde está el .exe
+        return os.path.dirname(sys.executable)
+    else:
+        # Si corre desde Python en VS Code
+        return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+
+BASE_DIR = get_base_dir()
+DB_DIR = os.path.join(BASE_DIR, "database")
+DB_PATH = os.path.join(DB_DIR, "sistema_departamentos.db")
+
+def hash_password(password: str) -> str:
+    return hashlib.sha256(password.encode("utf-8")).hexdigest()
 
 def get_connection():
-    """Retorna una conexión activa a la base de datos con FK habilitadas."""
+    os.makedirs(DB_DIR, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
-    conn.execute("PRAGMA foreign_keys = ON;")
     conn.row_factory = sqlite3.Row
     return conn
 
 def init_db():
-    """Inicializa la estructura de la base de datos y crea el usuario Admin inicial."""
-    if not os.path.exists(SCHEMA_PATH):
-        raise FileNotFoundError(f"No se encontró el archivo de esquema SQL en: {SCHEMA_PATH}")
-
-    # 1. Crear las tablas ejecutando el esquema dentro de un bloque de transacción explícito
-    with open(SCHEMA_PATH, 'r', encoding='utf-8') as f:
-        schema_script = f.read()
-
-    conn = get_connection()
-    try:
+    with get_connection() as conn:
         cursor = conn.cursor()
-        cursor.executescript(schema_script)
+        
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS usuarios (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                nombre_completo TEXT NOT NULL,
+                rol TEXT NOT NULL DEFAULT 'administrador'
+            );
+        """)
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS departamentos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                bloque TEXT NOT NULL,
+                numero_depto TEXT NOT NULL,
+                fojas TEXT,
+                numero_inscripcion TEXT,
+                ano_inscripcion INTEGER,
+                rol_sii TEXT,
+                avaluo_fiscal REAL,
+                observaciones TEXT,
+                UNIQUE(bloque, numero_depto)
+            );
+        """)
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS integrantes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                departamento_id INTEGER NOT NULL,
+                parentesco TEXT,
+                nombres TEXT,
+                apellido_paterno TEXT,
+                apellido_materno TEXT,
+                rut TEXT,
+                asistencia_reuniones TEXT DEFAULT 'NO',
+                FOREIGN KEY (departamento_id) REFERENCES departamentos (id) ON DELETE CASCADE
+            );
+        """)
+
+        # Asegurar usuarios por defecto
+        admin_pass = hash_password("admin123")
+        cursor.execute("""
+            INSERT INTO usuarios (username, password_hash, nombre_completo, rol)
+            VALUES ('admin', ?, 'Administrador Inicial', 'admin')
+            ON CONFLICT(username) DO UPDATE SET password_hash = excluded.password_hash;
+        """, (admin_pass,))
+
+        pepe_pass = hash_password("1928")
+        cursor.execute("""
+            INSERT INTO usuarios (username, password_hash, nombre_completo, rol)
+            VALUES ('pepe', ?, 'Pepe (Administrador)', 'admin')
+            ON CONFLICT(username) DO UPDATE SET password_hash = excluded.password_hash;
+        """, (pepe_pass,))
+
         conn.commit()
-    finally:
-        conn.close()
 
-    # 2. Crear un usuario administrador por defecto si la tabla está vacía
-    create_default_admin()
-
-def create_default_admin():
-    """Crea un usuario 'admin' por defecto con clave encriptada si no hay usuarios."""
-    conn = get_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM usuarios;")
-        total_usuarios = cursor.fetchone()[0]
-
-        if total_usuarios == 0:
-            admin_user = "admin"
-            admin_pass = "admin123"
-            pass_hashed = hash_password(admin_pass)
-
-            cursor.execute("""
-                INSERT INTO usuarios (username, password_hash, nombre_completo, rol)
-                VALUES (?, ?, ?, ?);
-            """, (admin_user, pass_hashed, "Administrador Inicial", "admin"))
-            
-            conn.commit()
-            print("--------------------------------------------------")
-            print("⚠️ BASE DE DATOS INICIALIZADA CON ÉXITO ⚠️")
-            print("Usuario Administrador por defecto creado:")
-            print(f" -> Usuario: {admin_user}")
-            print(f" -> Clave:   {admin_pass}")
-            print("--------------------------------------------------")
-    finally:
-        conn.close()
+if __name__ == "__main__":
+    init_db()

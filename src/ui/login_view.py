@@ -1,9 +1,13 @@
 import customtkinter as ctk
-from src.services.auth_service import authenticate_user
+from src.services.auth_service import autenticar_usuario
 
-# Configuración del tema visual
-ctk.set_appearance_mode("Dark")
-ctk.set_default_color_theme("blue")
+def centrar_ventana(ventana, ancho, alto):
+    ventana.update_idletasks()
+    ancho_pantalla = ventana.winfo_screenwidth()
+    alto_pantalla = ventana.winfo_screenheight()
+    pos_x = int((ancho_pantalla / 2) - (ancho / 2))
+    pos_y = int((alto_pantalla / 2) - (alto / 2)) - 20
+    ventana.geometry(f"{ancho}x{alto}+{max(0, pos_x)}+{max(0, pos_y)}")
 
 class LoginWindow(ctk.CTk):
     def __init__(self, on_login_success):
@@ -11,93 +15,88 @@ class LoginWindow(ctk.CTk):
 
         self.on_login_success = on_login_success
 
-        # Configuración de la ventana principal
-        self.title("Sistema de Gestión - Iniciar Sesión")
-        self.geometry("400x480")
+        self.title("Sistema de Gestión de Departamentos - Acceso")
         self.resizable(False, False)
+        
+        # Centrar Login
+        centrar_ventana(self, 400, 480)
 
-        # Centrar la ventana en la pantalla
-        self.eval('tk::PlaceWindow . center')
+        # Contenedor Principal
+        self.main_frame = ctk.CTkFrame(self, corner_radius=15)
+        self.main_frame.pack(pady=30, padx=30, fill="both", expand=True)
 
-        self.create_widgets()
-
-    def create_widgets(self):
-        # Frame contenedor
-        self.frame = ctk.CTkFrame(master=self, corner_radius=15)
-        self.frame.pack(pady=30, padx=30, fill="both", expand=True)
-
-        # Título
-        self.label_title = ctk.CTkLabel(
-            master=self.frame, 
-            text="Bienvenido", 
-            font=ctk.CTkFont(size=24, weight="bold")
+        # Título / Encabezado
+        self.title_label = ctk.CTkLabel(
+            self.main_frame, 
+            text="Iniciar Sesión", 
+            font=ctk.CTkFont(size=22, weight="bold")
         )
-        self.label_title.pack(pady=(30, 10))
+        self.title_label.pack(pady=(25, 10))
 
-        self.label_subtitle = ctk.CTkLabel(
-            master=self.frame, 
-            text="Gestión de Departamentos", 
-            font=ctk.CTkFont(size=13),
+        self.subtitle_label = ctk.CTkLabel(
+            self.main_frame, 
+            text="Ingresa tus credenciales para continuar", 
+            font=ctk.CTkFont(size=12),
             text_color="gray"
         )
-        self.label_subtitle.pack(pady=(0, 20))
+        self.subtitle_label.pack(pady=(0, 20))
 
-        # Campo: Usuario
-        self.entry_user = ctk.CTkEntry(
-            master=self.frame, 
-            placeholder_text="Usuario",
-            width=260,
+        # Campo Usuario
+        self.username_entry = ctk.CTkEntry(
+            self.main_frame, 
+            placeholder_text="Usuario (ej: admin)", 
+            width=280,
             height=40
         )
-        self.entry_user.pack(pady=10)
+        self.username_entry.pack(pady=10)
 
-        # Campo: Contraseña
-        self.entry_pass = ctk.CTkEntry(
-            master=self.frame, 
+        # Campo Contraseña
+        self.password_entry = ctk.CTkEntry(
+            self.main_frame, 
             placeholder_text="Contraseña", 
-            show="*",
-            width=260,
+            show="*", 
+            width=280,
             height=40
         )
-        self.entry_pass.pack(pady=10)
+        self.password_entry.pack(pady=10)
 
-        # Mensaje de error (oculto inicialmente)
-        self.label_error = ctk.CTkLabel(
-            master=self.frame, 
+        # Permite presionar Enter para iniciar sesión
+        self.password_entry.bind("<Return>", lambda event: self.ejecutar_login())
+
+        # Etiqueta de Mensaje de Error
+        self.error_label = ctk.CTkLabel(
+            self.main_frame, 
             text="", 
-            text_color="#FF5555",
-            font=ctk.CTkFont(size=12)
+            text_color="#FF5252", 
+            font=ctk.CTkFont(size=12, weight="bold")
         )
-        self.label_error.pack(pady=5)
+        self.error_label.pack(pady=5)
 
-        # Botón Iniciar Sesión
-        self.btn_login = ctk.CTkButton(
-            master=self.frame, 
-            text="Iniciar Sesión", 
-            command=self.handle_login,
-            width=260,
+        # Botón Ingresar
+        self.login_button = ctk.CTkButton(
+            self.main_frame, 
+            text="Ingresar", 
+            command=self.ejecutar_login,
+            width=280,
             height=40,
-            font=ctk.CTkFont(size=14, weight="bold")
+            fg_color="#1F6AA5",
+            hover_color="#144870"
         )
-        self.btn_login.pack(pady=(10, 20))
+        self.login_button.pack(pady=(10, 20))
 
-        # Permitir enviar con la tecla Enter
-        self.bind('<Return>', lambda event: self.handle_login())
-
-    def handle_login(self):
-        username = self.entry_user.get()
-        password = self.entry_pass.get()
+    def ejecutar_login(self):
+        username = self.username_entry.get().strip()
+        password = self.password_entry.get().strip()
 
         if not username or not password:
-            self.label_error.configure(text="Por favor completa todos los campos.")
+            self.error_label.configure(text="Por favor ingresa usuario y contraseña")
             return
 
-        # Intentar autenticar con el servicio de backend
-        user = authenticate_user(username, password)
+        usuario = autenticar_usuario(username, password)
 
-        if user:
-            self.label_error.configure(text="")
-            self.destroy()  # Cierra la ventana de login
-            self.on_login_success(user)  # Llama a la siguiente ventana pasándole el usuario
+        if usuario:
+            self.error_label.configure(text="")
+            self.destroy()
+            self.on_login_success(usuario)
         else:
-            self.label_error.configure(text="Usuario o contraseña incorrectos.")
+            self.error_label.configure(text="Usuario o contraseña incorrectos")

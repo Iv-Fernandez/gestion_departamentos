@@ -1,32 +1,27 @@
+import hashlib
 from src.services.db_service import get_connection
-from src.auth.security import verify_password
 
-def authenticate_user(username: str, password_plain: str):
-    """
-    Verifica las credenciales del usuario.
-    Retorna los datos del usuario si es correcto, o None si falla.
-    """
-    if not username or not password_plain:
-        return None
+def hash_password(password: str) -> str:
+    """Genera un hash SHA-256 para la contraseña."""
+    return hashlib.sha256(password.encode("utf-8")).hexdigest()
 
+def autenticar_usuario(username: str, password: str):
+    """
+    Verifica si las credenciales coinciden con algún usuario en la BD.
+    Retorna el diccionario con la información del usuario si es correcto, o None si falla.
+    """
+    hashed_pwd = hash_password(password)
+    
     with get_connection() as conn:
         cursor = conn.cursor()
-        # Usamos consulta parametrizada (?) para prevenir Inyección SQL
         cursor.execute("""
-            SELECT id, username, password_hash, nombre_completo, rol 
+            SELECT id, username, nombre_completo, rol 
             FROM usuarios 
-            WHERE username = ?;
-        """, (username.strip(),))
+            WHERE username = ? AND password_hash = ?;
+        """, (username.strip(), hashed_pwd))
         
-        user = cursor.fetchone()
-
-        if user and verify_password(password_plain, user["password_hash"]):
-            # Retornamos los datos sin el hash de la clave
-            return {
-                "id": user["id"],
-                "username": user["username"],
-                "nombre_completo": user["nombre_completo"],
-                "rol": user["rol"]
-            }
-    
-    return None
+        usuario = cursor.fetchone()
+        
+        if usuario:
+            return dict(usuario)
+        return None

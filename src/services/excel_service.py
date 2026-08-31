@@ -1,25 +1,24 @@
 import os
+import re
 import openpyxl
 from src.services.db_service import get_connection
 
 def importar_ficha_excel(filepath: str, bloque_nombre: str = ""):
     """
     Lee un archivo Excel con la ficha individual de un departamento y
-    guarda en la base de datos el departamento y su grupo familiar.
+    guarda en la BD dejando únicamente la numeración del Block.
     """
     try:
         wb = openpyxl.load_workbook(filepath, data_only=True)
         sheet = wb.active
 
-        # 1. Extraer datos del Departamento desde la FILA 3
         filename = os.path.basename(filepath)
         depto_val = filename.split()[0].strip() if filename else ""
 
-        if bloque_nombre:
-            bloque_val = bloque_nombre.strip()
-        else:
-            celda_a3 = str(sheet.cell(row=3, column=1).value or "").strip()
-            bloque_val = celda_a3.split()[0] if celda_a3 else "SIN BLOQUE"
+        # Extraer únicamente los dígitos del bloque (ej: "BLOKC 2613" -> "2613")
+        texto_bloque = bloque_nombre or str(sheet.cell(row=3, column=1).value or "")
+        numeros_bloque = re.findall(r'\d+', texto_bloque)
+        bloque_val = numeros_bloque[0] if numeros_bloque else texto_bloque.strip()
 
         fojas = str(sheet.cell(row=3, column=7).value or "").strip()
         numero_insc = str(sheet.cell(row=3, column=8).value or "").strip()
@@ -36,10 +35,8 @@ def importar_ficha_excel(filepath: str, bloque_nombre: str = ""):
         except (ValueError, TypeError):
             avaluo = None
 
-        # Observaciones (al final de la hoja)
         obs_val = str(sheet.cell(row=21, column=2).value or sheet.cell(row=20, column=2).value or "").strip()
 
-        # Guardar / Actualizar Departamento en la BD
         conn = get_connection()
         cursor = conn.cursor()
 
@@ -55,11 +52,9 @@ def importar_ficha_excel(filepath: str, bloque_nombre: str = ""):
                 observaciones = excluded.observaciones;
         """, (bloque_val, depto_val, fojas, numero_insc, ano_insc, rol_sii, avaluo, obs_val))
 
-        # Obtener ID
         cursor.execute("SELECT id FROM departamentos WHERE bloque = ? AND numero_depto = ?;", (bloque_val, depto_val))
         depto_id = cursor.fetchone()["id"]
 
-        # 2. Extraer Integrantes del Grupo Familiar (Filas 6 a 20)
         cursor.execute("DELETE FROM integrantes WHERE departamento_id = ?;", (depto_id,))
 
         for row_idx in range(6, 21):
@@ -79,16 +74,12 @@ def importar_ficha_excel(filepath: str, bloque_nombre: str = ""):
 
         conn.commit()
         conn.close()
-        return True, f"Ficha {depto_val} ({bloque_val}) importada con éxito."
+        return True, f"Ficha {depto_val} (Block {bloque_val}) importada con éxito."
 
     except Exception as e:
         return False, f"Error al procesar {filepath}: {str(e)}"
 
-
 def importar_carpeta_bloque(folder_path: str):
-    """
-    Recorre todos los archivos .xlsx de una carpeta (ej: BLOKC 2613) e importa cada uno.
-    """
     bloque_nombre = os.path.basename(folder_path)
     archivos = [f for f in os.listdir(folder_path) if f.endswith('.xlsx') and not f.startswith('~$')]
     
@@ -105,11 +96,7 @@ def importar_carpeta_bloque(folder_path: str):
 
     return exitos, errores, len(archivos)
 
-
 def exportar_consolidad_excel(output_path: str):
-    """
-    Exporta toda la base de datos a un libro de Excel consolidado usando openpyxl.
-    """
     try:
         conn = get_connection()
         cursor = conn.cursor()
@@ -141,7 +128,6 @@ def exportar_consolidad_excel(output_path: str):
         ws = wb.active
         ws.title = "Consolidado"
 
-        # Encabezados
         headers = [
             "BLOCK", "DEPTO", "ROL SII", "AVALÚO FISCAL", "FOJAS", 
             "N° INSCRIPCIÓN", "AÑO", "PARENTESCO", "NOMBRES", 
@@ -149,7 +135,6 @@ def exportar_consolidad_excel(output_path: str):
         ]
         ws.append(headers)
 
-        # Insertar registros
         for row in rows:
             ws.append([
                 row["BLOCK"], row["DEPTO"], row["ROL SII"], row["AVALÚO FISCAL"],

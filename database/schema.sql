@@ -13,14 +13,14 @@ CREATE TABLE IF NOT EXISTS usuarios (
 -- Tabla de Departamentos adaptada a las fichas reales
 CREATE TABLE IF NOT EXISTS departamentos (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    bloque TEXT NOT NULL,                  -- Ej: 'BLOCK 2613'
-    numero_depto TEXT NOT NULL,            -- Ej: 'A-11'
-    fojas TEXT,                            -- FS
-    numero_inscripcion TEXT,               -- NUMERO
-    ano_inscripcion INTEGER,               -- AÑO
-    rol_sii TEXT,                          -- ROL
-    avaluo_fiscal REAL,                    -- AVALUO
-    observaciones TEXT,                    -- OBCERBACIONES
+    bloque TEXT NOT NULL,                  
+    numero_depto TEXT NOT NULL,            
+    fojas TEXT,                           
+    numero_inscripcion TEXT,               
+    ano_inscripcion INTEGER,               
+    rol_sii TEXT,                          
+    avaluo_fiscal REAL,                    
+    observaciones TEXT,                    
     UNIQUE(bloque, numero_depto)
 );
 
@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS departamentos (
 CREATE TABLE IF NOT EXISTS integrantes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     departamento_id INTEGER NOT NULL,
-    parentesco TEXT NOT NULL,              -- 'PROPIETARIO', 'CONYUGE', 'HIJO', 'ARRENDATARIO', etc.
+    parentesco TEXT NOT NULL,              
     nombres TEXT,
     apellido_paterno TEXT,
     apellido_materno TEXT,

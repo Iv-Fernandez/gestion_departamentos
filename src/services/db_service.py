@@ -4,15 +4,9 @@ import sys
 import hashlib
 
 def get_base_dir():
-    """
-    Obtiene la ruta real donde está ejecutándose la app,
-    tanto en modo desarrollo como en el archivo .exe compilado.
-    """
     if getattr(sys, 'frozen', False):
-        # Si corre dentro de un ejecutable (.exe), la ruta base es donde está el .exe
         return os.path.dirname(sys.executable)
     else:
-        # Si corre desde Python en VS Code
         return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
 BASE_DIR = get_base_dir()
@@ -32,16 +26,18 @@ def init_db():
     with get_connection() as conn:
         cursor = conn.cursor()
         
+        # Tabla usuarios
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS usuarios (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT UNIQUE NOT NULL,
                 password_hash TEXT NOT NULL,
                 nombre_completo TEXT NOT NULL,
-                rol TEXT NOT NULL DEFAULT 'administrador'
+                rol TEXT NOT NULL DEFAULT 'admin'
             );
         """)
 
+        # Tabla departamentos
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS departamentos (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -57,6 +53,7 @@ def init_db():
             );
         """)
 
+        # Tabla integrantes
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS integrantes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -71,7 +68,23 @@ def init_db():
             );
         """)
 
-        # Asegurar usuarios por defecto
+        # Tabla Hoja de Convivencia con soporte para fecha de modificación
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS historial_convivencia (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                departamento_id INTEGER,
+                es_general INTEGER DEFAULT 0,
+                tipo_evento TEXT NOT NULL,
+                titulo TEXT NOT NULL,
+                descripcion TEXT NOT NULL,
+                fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                fecha_modificacion TEXT,
+                autor TEXT NOT NULL,
+                FOREIGN KEY (departamento_id) REFERENCES departamentos (id) ON DELETE CASCADE
+            );
+        """)
+
+        # Usuarios por defecto
         admin_pass = hash_password("admin123")
         cursor.execute("""
             INSERT INTO usuarios (username, password_hash, nombre_completo, rol)
